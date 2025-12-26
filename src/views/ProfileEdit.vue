@@ -52,6 +52,33 @@
         </div>
 
         <div class="form-section">
+          <h2>Biografija</h2>
+          <div class="form-group">
+            <label>Detalji o profilu</label>
+            <textarea 
+              v-model="formData.biography" 
+              rows="6"
+              placeholder="Unesi biografiju, životnu priču, uspomene..."
+            ></textarea>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <h2>Lokacija</h2>
+          <div class="form-group">
+            <label>Adresa</label>
+            <input 
+              type="text" 
+              v-model="formData.locationAddress" 
+              placeholder="Unesi adresu..."
+            />
+          </div>
+          <div v-if="formData.location" class="location-info">
+            <p><strong>Sačuvana lokacija:</strong> {{ formData.locationAddress || `${formData.location.lat?.toFixed(4)}, ${formData.location.lng?.toFixed(4)}` }}</p>
+          </div>
+        </div>
+
+        <div class="form-section">
           <h2>Slike Kocke</h2>
           <p class="section-description">Dodaj slike za svaku stranu kocke (Leva, Desna, Gornja, Donja, Prednja, Zadnja)</p>
           
@@ -113,6 +140,9 @@ const formData = ref({
   name: '',
   age: null,
   description: '',
+  biography: '',
+  location: null,
+  locationAddress: '',
   relation: '',
   parentId: '',
   images: [null, null, null, null, null, null],
@@ -134,6 +164,9 @@ onMounted(() => {
         name: profile.name || '',
         age: profile.age || null,
         description: profile.description || '',
+        biography: profile.biography || '',
+        location: profile.location || null,
+        locationAddress: profile.location?.address || '',
         relation: profile.relation || '',
         parentId: profile.parentId || '',
         images: profile.images || [null, null, null, null, null, null],
@@ -195,6 +228,8 @@ const saveProfile = () => {
       name: formData.value.name.trim(),
       age: formData.value.age || null,
       description: formData.value.description || '',
+      biography: formData.value.biography || '',
+      location: formData.value.location,
       relation: formData.value.relation || null,
       parentId: formData.value.parentId && formData.value.parentId !== '' ? formData.value.parentId : null,
       images: formData.value.images,
@@ -219,6 +254,8 @@ const saveProfile = () => {
       name: formData.value.name.trim(),
       age: formData.value.age || null,
       description: formData.value.description || '',
+      biography: formData.value.biography || '',
+      location: formData.value.location,
       relation: formData.value.relation || null,
       parentId: parentId,
       images: formData.value.images,
@@ -434,6 +471,18 @@ const saveProfile = () => {
 .image-placeholder {
   color: #999;
   font-size: 0.9rem;
+}
+
+.location-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f5f5f5;
+  border-radius: 8px;
+}
+
+.location-info p {
+  color: #666;
+  margin: 0;
 }
 
 .image-input {

@@ -1,12 +1,34 @@
 <template>
   <div class="tree-3d-container">
-    <div ref="containerRef" class="canvas-container"></div>
+    <canvas ref="canvasRef" class="canvas-container"></canvas>
 
     <!-- Galaxy UI Overlay -->
     <div v-if="viewMode === 'galaxy'" class="galaxy-ui">
+      <div class="galaxy-header">
+        <button @click="handleBackToProfile" class="back-button-galaxy">
+          <span class="back-icon">←</span>
+          <span>NAZAD</span>
+        </button>
+      </div>
       <div class="galaxy-title">
-        <h1>COSMOS</h1>
+        <h1>Family Tree</h1>
         <p>Family Network Visualization</p>
+      </div>
+      
+      <!-- Map Mode Toggle -->
+      <div class="map-mode-toggle">
+        <button 
+          @click="switchToGlobe" 
+          :class="['mode-btn', { active: mapMode === 'globe' }]"
+        >
+          🌍 Globe
+        </button>
+        <button 
+          @click="switchToFlat" 
+          :class="['mode-btn', { active: mapMode === 'flat' }]"
+        >
+          🗺️ Fleet
+        </button>
       </div>
 
       <div class="galaxy-instructions">
@@ -254,7 +276,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import * as THREE from 'three'
 import { useFamilyTreeStore } from '../stores/familyTree'
@@ -263,9 +285,10 @@ import { Tree3DRenderer } from '../components/Tree3DRenderer.js'
 const router = useRouter()
 
 const { familyTree } = useFamilyTreeStore()
-const containerRef = ref(null)
+const canvasRef = ref(null)
 const treeRenderer = ref(null)
 const viewMode = ref('galaxy') // 'galaxy' or 'tree'
+const mapMode = ref('globe') // 'globe' or 'flat'
 const selectedFamilyId = ref(null)
 const selectedMemberId = ref(null)
 
@@ -317,18 +340,27 @@ const selectedMember = computed(() => {
   return familyTree.getProfile(selectedMemberId.value)
 })
 
-onMounted(() => {
-  if (!containerRef.value) {
-    console.error('Container ref nije dostupan')
+onMounted(async () => {
+  await nextTick()
+  
+  if (!canvasRef.value) {
+    console.error('Canvas ref nije dostupan')
     return
   }
   
   setTimeout(() => {
     try {
-      // Create canvas
-      const canvas = document.createElement('canvas')
-      containerRef.value.appendChild(canvas)
+      // Use canvas directly from template
+      const canvas = canvasRef.value
       
+      // Set canvas size
+      canvas.width = window.innerWidth
+      canvas.height = window.innerHeight
+      
+      console.log('Canvas element:', canvas)
+      console.log('Canvas size:', canvas.width, 'x', canvas.height)
+      
+      // Try to create renderer - it will handle WebGL errors internally
       treeRenderer.value = new Tree3DRenderer(canvas, familyTree)
       
       if (!treeRenderer.value || !treeRenderer.value.renderer) {
@@ -352,18 +384,36 @@ onMounted(() => {
         viewMode.value = mode
       }
       
-      // Add initial profile if needed
-      if (familyTree.getAllProfiles().length === 0) {
-        familyTree.addProfile({
-          name: 'Tvoj Profil',
-          description: 'Počni da gradiš svoje porodično stablo!',
-          isDummy: false,
-          isUnlocked: true
-        })
-      }
+      // Sync map mode
+      treeRenderer.value.mapMode = mapMode.value
+      
+      console.log('Initial profiles count:', familyTree.getAllProfiles().length)
       
       // Render initial view
-      treeRenderer.value.renderTree()
+      if (familyTree.getAllProfiles().length > 0) {
+        treeRenderer.value.renderTree()
+      } else {
+        console.warn('No profiles found, cannot render 3D view')
+      }
+      
+      // Watch for profile changes and re-render
+      watch(() => familyTree.getAllProfiles().length, (newLength, oldLength) => {
+        console.log('Profile count changed:', oldLength, '->', newLength)
+        if (treeRenderer.value && viewMode.value === 'galaxy' && newLength > 0) {
+          console.log('Re-rendering galaxy view due to profile change')
+          treeRenderer.value.renderTree()
+        }
+      })
+      
+      // Watch for map mode changes
+      watch(() => mapMode.value, (newMode) => {
+        if (treeRenderer.value) {
+          treeRenderer.value.mapMode = newMode
+          if (viewMode.value === 'galaxy') {
+            treeRenderer.value.renderTree()
+          }
+        }
+      })
     } catch (error) {
       console.error('Greška pri inicijalizaciji 3D renderera:', error)
     }
@@ -392,6 +442,14 @@ const handleBackToGalaxy = () => {
 const handleBackToProfile = () => {
   // Navigate to home/profile page
   router.push('/home')
+}
+
+const switchToGlobe = () => {
+  mapMode.value = 'globe'
+}
+
+const switchToFlat = () => {
+  mapMode.value = 'flat'
 }
 
 const closeDetailPanel = () => {
@@ -504,11 +562,46 @@ canvas {
   z-index: 10;
 }
 
-.galaxy-title {
+.galaxy-header {
   position: absolute;
   top: 24px;
   left: 24px;
+  pointer-events: auto;
+  z-index: 11;
+}
+
+.back-button-galaxy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-button-galaxy:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.back-button-galaxy .back-icon {
+  font-size: 16px;
+}
+
+.galaxy-title {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   pointer-events: none;
+  text-align: center;
 }
 
 .galaxy-title h1 {
@@ -527,6 +620,40 @@ canvas {
   text-transform: uppercase;
   opacity: 0.8;
   margin: 0;
+}
+
+.map-mode-toggle {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+  z-index: 11;
+}
+
+.mode-btn {
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.mode-btn.active {
+  background: rgba(0, 217, 255, 0.8);
+  border-color: rgba(0, 217, 255, 0.6);
+  color: white;
 }
 
 .galaxy-instructions {

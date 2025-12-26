@@ -8,8 +8,12 @@ class FamilyTree {
   }
 
   addProfile(profileData) {
-    // Validacija
-    if (!profileData || !profileData.name || profileData.name.trim() === '') {
+    // Validacija - ime ili firstName+lastName su obavezni
+    const hasName = profileData.name && profileData.name.trim() !== ''
+    const hasFirstLastName = profileData.firstName && profileData.firstName.trim() !== '' && 
+                            profileData.lastName && profileData.lastName.trim() !== ''
+    
+    if (!profileData || (!hasName && !hasFirstLastName)) {
       console.error('Ime profila je obavezno')
       return null
     }
@@ -21,13 +25,28 @@ class FamilyTree {
       ? profileData.parentId 
       : null
     
+    // Generiši name ako nije prosleđen (za kompatibilnost)
+    const name = profileData.name || 
+                 (profileData.firstName && profileData.lastName 
+                   ? `${profileData.firstName.trim()} ${profileData.lastName.trim()}` 
+                   : profileData.firstName || profileData.lastName || '')
+    
     const profile = {
       id,
-      name: profileData.name.trim(),
+      name: name.trim(),
+      firstName: profileData.firstName ? profileData.firstName.trim() : (profileData.name ? profileData.name.split(' ')[0] : ''),
+      lastName: profileData.lastName ? profileData.lastName.trim() : (profileData.name && profileData.name.split(' ').length > 1 ? profileData.name.split(' ').slice(1).join(' ') : ''),
       age: profileData.age || null,
       description: profileData.description || '',
+      biography: profileData.biography || '',
+      country: profileData.country || '',
+      city: profileData.city || '',
+      location: profileData.location || null, // { lat, lng, address, country, city }
+      profileImage: profileData.profileImage || null,
+      galleryImages: profileData.galleryImages || [],
       relation: profileData.relation || null,
       parentId: parentId,
+      spouseId: profileData.spouseId || null,
       isDummy: profileData.isDummy || false,
       isUnlocked: profileData.isUnlocked !== undefined ? profileData.isUnlocked : true,
       images: profileData.images || [null, null, null, null, null, null],

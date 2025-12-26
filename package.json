@@ -17,6 +17,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "leaflet": "^1.9.4",
     "three": "^0.160.0",
     "vue": "^3.4.0",
     "vue-router": "^4.2.5"
