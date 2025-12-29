@@ -61,6 +61,61 @@ npm run build
 5. **Dodaj Profil**: Klikni na "Dodaj Profil" i popuni formu
 6. **Uredi Profil**: Klikni na profil u 2D prikazu ili kockicu u 3D prikazu
 
+## 🗺️ Konfiguracija Mape
+
+Aplikacija podržava različite stilove mape za 3D prikaz:
+
+### Opcije Stilova Mape
+
+1. **OSM (OpenStreetMap)** - Standardni stil sa svim detaljima (putevi, gradovi, itd.)
+   - Podrazumevano
+   - Besplatan, bez API key-a
+
+2. **MapTiler Basic** - Čistiji stil, manje detalja
+   - Zahteva MapTiler API key
+   - Free tier: 100,000 zahteva/mesec
+
+3. **MapTiler Boundaries** - Custom stil sa samo granicama država i glavnim gradovima
+   - Zahteva MapTiler API key i custom stil kreiran u MapTiler Studio
+   - Najčišći prikaz, fokus na granice
+
+4. **Static Boundaries** - Statička mapa sa granicama (bez zoom detalja)
+   - Zahteva URL do statičke mape (npr. generisane na MapChart.net)
+
+### Konfiguracija
+
+Kreiraj `.env` fajl u root direktorijumu projekta:
+
+```env
+# MapTiler API Key (opciono)
+# Registruj se na: https://www.maptiler.com/cloud/
+VITE_MAPTILER_API_KEY=your_api_key_here
+
+# Stil mape: 'osm', 'basic', 'boundaries', 'static-boundaries'
+VITE_MAP_TILE_STYLE=osm
+
+# URL do statičke mape sa granicama (samo za 'static-boundaries' stil)
+VITE_STATIC_BOUNDARIES_MAP_URL=https://example.com/path/to/boundaries-map.png
+```
+
+### Kako dobiti MapTiler API Key
+
+1. Registruj se na [MapTiler Cloud](https://www.maptiler.com/cloud/)
+2. Kreiraj novi projekat
+3. Kopiraj API key iz dashboard-a
+4. Dodaj ga u `.env` fajl
+
+### Kreiranje Custom Stila sa Samo Granicama (MapTiler Studio)
+
+1. Otvori [MapTiler Studio](https://studio.maptiler.com/)
+2. Kreiraj novi stil baziran na OSM podacima
+3. Ukloni sve layere osim:
+   - `boundaries` (granice država - admin_level=2)
+   - `places` (glavni gradovi)
+4. Sakrij puteve, landuse, i ostale detalje
+5. Sačuvaj stil i kopiraj Style ID
+6. Koristi Style ID u kodu (zahteva dodatnu implementaciju)
+
 ## 🛠️ Tehnologije
 
 - **Vue.js 3**: Frontend framework
@@ -68,6 +123,8 @@ npm run build
 - **Three.js**: 3D rendering i vizualizacija
 - **Vite**: Build tool i development server
 - **LocalStorage**: Čuvanje podataka lokalno (bez backend-a)
+- **OpenStreetMap**: Besplatni tile servis za mape
+- **MapTiler**: Premium tile servis sa custom stilovima (opciono)
 
 ## 📁 Struktura Projekta
 

@@ -3,71 +3,176 @@ import { ref } from 'vue'
 class FamilyTree {
   constructor() {
     this.profiles = new Map()
-    this.relationships = new Map()
     this.rootProfileId = null
+
+    this.loadFromLocalStorage()
+
+    // Ako nema podataka – kreiraj test porodicu sa Markom kao root-om
+    if (this.profiles.size === 0) {
+      this.createTestFamily()
+    }
   }
 
   addProfile(profileData) {
-    // Validacija - ime ili firstName+lastName su obavezni
-    const hasName = profileData.name && profileData.name.trim() !== ''
-    const hasFirstLastName = profileData.firstName && profileData.firstName.trim() !== '' && 
-                            profileData.lastName && profileData.lastName.trim() !== ''
-    
-    if (!profileData || (!hasName && !hasFirstLastName)) {
-      console.error('Ime profila je obavezno')
-      return null
-    }
-    
     const id = `profile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
-    // Normalizuj parentId - prazan string ili undefined postaje null
-    const parentId = profileData.parentId && profileData.parentId !== '' 
-      ? profileData.parentId 
-      : null
-    
-    // Generiši name ako nije prosleđen (za kompatibilnost)
-    const name = profileData.name || 
-                 (profileData.firstName && profileData.lastName 
-                   ? `${profileData.firstName.trim()} ${profileData.lastName.trim()}` 
-                   : profileData.firstName || profileData.lastName || '')
-    
+
+    const name = profileData.name || `${profileData.firstName || ''} ${profileData.lastName || ''}`.trim()
+
     const profile = {
       id,
       name: name.trim(),
-      firstName: profileData.firstName ? profileData.firstName.trim() : (profileData.name ? profileData.name.split(' ')[0] : ''),
-      lastName: profileData.lastName ? profileData.lastName.trim() : (profileData.name && profileData.name.split(' ').length > 1 ? profileData.name.split(' ').slice(1).join(' ') : ''),
+      firstName: (profileData.firstName || name.split(' ')[0] || '').trim(),
+      lastName: (profileData.lastName || (name.split(' ').length > 1 ? name.split(' ').slice(1).join(' ') : '')).trim(),
       age: profileData.age || null,
-      description: profileData.description || '',
-      biography: profileData.biography || '',
-      country: profileData.country || '',
+      gender: profileData.gender || 'male',
       city: profileData.city || '',
-      location: profileData.location || null, // { lat, lng, address, country, city }
+      country: profileData.country || '',
       profileImage: profileData.profileImage || null,
-      galleryImages: profileData.galleryImages || [],
-      relation: profileData.relation || null,
-      parentId: parentId,
+      parentId: profileData.parentId || null,
       spouseId: profileData.spouseId || null,
-      isDummy: profileData.isDummy || false,
-      isUnlocked: profileData.isUnlocked !== undefined ? profileData.isUnlocked : true,
-      images: profileData.images || [null, null, null, null, null, null],
+      location: profileData.location || null,
       createdAt: new Date().toISOString()
     }
-    
+
     this.profiles.set(id, profile)
-    this.relationships.set(id, [])
-    
-    if (!this.rootProfileId) {
-      this.rootProfileId = id
-    }
-    
-    if (profile.parentId && this.profiles.has(profile.parentId)) {
-      this.profiles.get(profile.parentId).children = this.profiles.get(profile.parentId).children || []
-      this.profiles.get(profile.parentId).children.push(id)
-    }
-    
     this.saveToLocalStorage()
-    console.log('Profil dodat:', profile)
     return profile
+  }
+
+  createTestFamily() {
+    // 1. Deda i baka
+    const deda = this.addProfile({
+      name: 'Petar Marković',
+      age: 72,
+      gender: 'male',
+      city: 'Beograd',
+      country: 'Srbija',
+      location: { lat: 44.7866, lng: 20.4489 }
+    })
+
+    const baka = this.addProfile({
+      name: 'Milena Marković',
+      age: 70,
+      gender: 'female',
+      city: 'Beograd',
+      country: 'Srbija',
+      location: { lat: 44.7866, lng: 20.4489 }
+    })
+
+    // Veza deda ↔ baka
+    this.updateProfile(deda.id, { spouseId: baka.id })
+    this.updateProfile(baka.id, { spouseId: deda.id })
+
+    // 2. Deca dede: Marko, Jelena, Dragan
+    const otacMarko = this.addProfile({
+      name: 'Marko Marković',
+      age: 45,
+      gender: 'male',
+      city: 'Beograd',
+      country: 'Srbija',
+      parentId: deda.id,
+      location: { lat: 44.7866, lng: 20.4489 }
+    })
+
+    const tetkaJelena = this.addProfile({
+      name: 'Jelena Petrović',
+      age: 43,
+      gender: 'female',
+      city: 'Novi Sad',
+      country: 'Srbija',
+      parentId: deda.id,
+      location: { lat: 45.2396, lng: 19.8227 }
+    })
+
+    const stricDragan = this.addProfile({
+      name: 'Dragan Marković',
+      age: 48,
+      gender: 'male',
+      city: 'Niš',
+      country: 'Srbija',
+      parentId: deda.id,
+      location: { lat: 43.3209, lng: 21.9036 }
+    })
+
+    // 3. Supruge/supružnici
+    const majkaAna = this.addProfile({
+      name: 'Ana Marković',
+      age: 42,
+      gender: 'female',
+      city: 'Beograd',
+      country: 'Srbija',
+      location: { lat: 44.7866, lng: 20.4489 }
+    })
+
+    const strinaSanja = this.addProfile({
+      name: 'Sanja Marković',
+      age: 46,
+      gender: 'female',
+      city: 'Niš',
+      country: 'Srbija',
+      location: { lat: 43.3209, lng: 21.9036 }
+    })
+
+    // Veze supružnika
+    this.updateProfile(otacMarko.id, { spouseId: majkaAna.id })
+    this.updateProfile(majkaAna.id, { spouseId: otacMarko.id })
+
+    this.updateProfile(stricDragan.id, { spouseId: strinaSanja.id })
+    this.updateProfile(strinaSanja.id, { spouseId: stricDragan.id })
+
+    // 4. Deca
+    this.addProfile({
+      name: 'Luka Marković',
+      age: 16,
+      gender: 'male',
+      city: 'Beograd',
+      country: 'Srbija',
+      parentId: otacMarko.id,
+      location: { lat: 44.7866, lng: 20.4489 }
+    })
+
+    this.addProfile({
+      name: 'Sara Marković',
+      age: 12,
+      gender: 'female',
+      city: 'Beograd',
+      country: 'Srbija',
+      parentId: otacMarko.id,
+      location: { lat: 44.7866, lng: 20.4489 }
+    })
+
+    this.addProfile({
+      name: 'Nikola Petrović',
+      age: 10,
+      gender: 'male',
+      city: 'Novi Sad',
+      country: 'Srbija',
+      parentId: tetkaJelena.id,
+      location: { lat: 45.2396, lng: 19.8227 }
+    })
+
+    this.addProfile({
+      name: 'Stefan Marković',
+      age: 14,
+      gender: 'male',
+      city: 'Niš',
+      country: 'Srbija',
+      parentId: stricDragan.id,
+      location: { lat: 43.3209, lng: 21.9036 }
+    })
+
+    // *** KLJUČNO: MARKO JE ROOT (centralni član) ***
+    this.rootProfileId = otacMarko.id
+
+    console.log('✅ Test porodično stablo uspešno kreirano! Root je Marko:', otacMarko.id)
+  }
+
+  updateProfile(id, updates) {
+    const profile = this.profiles.get(id)
+    if (profile) {
+      Object.assign(profile, updates)
+      this.saveToLocalStorage()
+    }
   }
 
   getProfile(id) {
@@ -78,88 +183,43 @@ class FamilyTree {
     return Array.from(this.profiles.values())
   }
 
-  getChildren(profileId) {
-    const profile = this.profiles.get(profileId)
-    if (!profile) return []
-    return this.getAllProfiles().filter(p => p.parentId === profileId)
-  }
-
-  updateProfile(profileId, updates) {
-    const profile = this.profiles.get(profileId)
-    if (profile) {
-      Object.assign(profile, updates)
-      this.saveToLocalStorage()
-      return profile
-    }
-    return null
-  }
-
-  updateProfileImage(profileId, sideIndex, imageData) {
-    const profile = this.profiles.get(profileId)
-    if (profile) {
-      if (!profile.images) {
-        profile.images = [null, null, null, null, null, null]
-      }
-      profile.images[sideIndex] = imageData
-      this.saveToLocalStorage()
-      return profile
-    }
-    return null
-  }
-
-  updateProfilePosition(profileId, x, y, z = null) {
-    const profile = this.profiles.get(profileId)
+  updateProfilePosition(id, x, y) {
+    const profile = this.profiles.get(id)
     if (profile) {
       profile.positionX = x
       profile.positionY = y
-      if (z !== null) {
-        profile.positionZ = z
-      }
       this.saveToLocalStorage()
-      return profile
     }
-    return null
   }
 
-  getProfilePosition(profileId) {
-    const profile = this.profiles.get(profileId)
+  getProfilePosition(id) {
+    const profile = this.profiles.get(id)
     if (profile && profile.positionX !== undefined && profile.positionY !== undefined) {
-      return { 
-        x: profile.positionX, 
-        y: profile.positionY,
-        z: profile.positionZ !== undefined ? profile.positionZ : 0
-      }
+      return { x: profile.positionX, y: profile.positionY }
     }
     return null
   }
 
-  deleteProfile(profileId) {
-    const profile = this.profiles.get(profileId)
+  deleteProfile(id) {
+    if (this.profiles.size <= 1) return false
+
+    const profile = this.profiles.get(id)
     if (!profile) return false
 
-    // Ne dozvoli brisanje root profila ako je jedini profil
-    if (profileId === this.rootProfileId && this.profiles.size === 1) {
-      console.warn('Ne može se obrisati poslednji profil')
-      return false
-    }
-
-    // Obriši veze sa decom - postavi im parentId na null
-    const children = this.getChildren(profileId)
-    children.forEach(child => {
-      child.parentId = null
+    // Obriši veze kod ostalih
+    this.getAllProfiles().forEach(p => {
+      if (p.parentId === id) p.parentId = null
+      if (p.spouseId === id) p.spouseId = null
     })
 
-    // Obriši profil
-    this.profiles.delete(profileId)
-    this.relationships.delete(profileId)
+    this.profiles.delete(id)
 
-    // Ako je bio root profil, postavi novi root
-    if (profileId === this.rootProfileId && this.profiles.size > 0) {
-      this.rootProfileId = Array.from(this.profiles.keys())[0]
+    // Ako je obrisan root, postavi novi
+    if (id === this.rootProfileId && this.profiles.size > 0) {
+      this.rootProfileId = this.getAllProfiles()[0].id
     }
 
     this.saveToLocalStorage()
-    console.log('Profil obrisan:', profileId)
     return true
   }
 
@@ -169,32 +229,29 @@ class FamilyTree {
         profiles: Array.from(this.profiles.entries()),
         rootProfileId: this.rootProfileId
       }
-      localStorage.setItem('familyTree', JSON.stringify(data))
-    } catch (error) {
-      console.error('Error saving to localStorage:', error)
+      localStorage.setItem('familyTreeData', JSON.stringify(data))
+    } catch (e) {
+      console.error('Greška pri čuvanju u localStorage:', e)
     }
   }
 
   loadFromLocalStorage() {
     try {
-      const data = localStorage.getItem('familyTree')
-      if (data) {
-        const parsed = JSON.parse(data)
-        this.profiles = new Map(parsed.profiles)
-        this.rootProfileId = parsed.rootProfileId
+      const saved = localStorage.getItem('familyTreeData')
+      if (saved) {
+        const data = JSON.parse(saved)
+        this.profiles = new Map(data.profiles || [])
+        this.rootProfileId = data.rootProfileId || null
+        console.log('✅ Podaci učitani iz localStorage-a. Root:', this.rootProfileId)
       }
-    } catch (error) {
-      console.error('Error loading from localStorage:', error)
+    } catch (e) {
+      console.error('Greška pri učitavanju iz localStorage-a:', e)
     }
   }
 }
 
 const familyTree = new FamilyTree()
-familyTree.loadFromLocalStorage()
 
 export function useFamilyTreeStore() {
-  return {
-    familyTree
-  }
+  return { familyTree }
 }
-

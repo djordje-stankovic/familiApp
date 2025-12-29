@@ -73,8 +73,19 @@
               placeholder="Unesi adresu..."
             />
           </div>
+          <div class="form-group">
+            <button 
+              type="button" 
+              @click="getCurrentLocation" 
+              class="btn-secondary"
+              :disabled="gettingLocation"
+            >
+              {{ gettingLocation ? 'Dobijam lokaciju...' : 'Koristi moju trenutnu lokaciju' }}
+            </button>
+          </div>
           <div v-if="formData.location" class="location-info">
             <p><strong>Sačuvana lokacija:</strong> {{ formData.locationAddress || `${formData.location.lat?.toFixed(4)}, ${formData.location.lng?.toFixed(4)}` }}</p>
+            <button type="button" @click="clearLocation" class="btn-small">Ukloni lokaciju</button>
           </div>
         </div>
 
@@ -212,8 +223,44 @@ const handleImageUpload = (event, index) => {
   }
 }
 
-const removeImage = (index) => {
-  formData.value.images[index] = null
+const gettingLocation = ref(false)
+
+const getCurrentLocation = () => {
+  if (!navigator.geolocation) {
+    alert('Geolokacija nije podržana u ovom browser-u')
+    return
+  }
+  
+  gettingLocation.value = true
+  
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const { latitude, longitude } = position.coords
+      formData.value.location = {
+        lat: latitude,
+        lng: longitude,
+        address: formData.value.locationAddress || null,
+        country: null,
+        city: null
+      }
+      gettingLocation.value = false
+    },
+    (error) => {
+      console.error('Greška pri dobijanju lokacije:', error)
+      alert('Nije moguće dobiti lokaciju. Proverite dozvole za lokaciju u browser-u.')
+      gettingLocation.value = false
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000 // 5 minuta
+    }
+  )
+}
+
+const clearLocation = () => {
+  formData.value.location = null
+  formData.value.locationAddress = ''
 }
 
 const saveProfile = () => {
@@ -224,12 +271,18 @@ const saveProfile = () => {
   }
   
   if (isEditMode.value) {
+    // Pripremi location objekat
+    const locationData = formData.value.location ? {
+      ...formData.value.location,
+      address: formData.value.locationAddress || formData.value.location.address
+    } : null
+    
     familyTree.updateProfile(route.params.id, {
       name: formData.value.name.trim(),
       age: formData.value.age || null,
       description: formData.value.description || '',
       biography: formData.value.biography || '',
-      location: formData.value.location,
+      location: locationData,
       relation: formData.value.relation || null,
       parentId: formData.value.parentId && formData.value.parentId !== '' ? formData.value.parentId : null,
       images: formData.value.images,
@@ -250,12 +303,18 @@ const saveProfile = () => {
       ? formData.value.parentId 
       : null
     
+    // Pripremi location objekat
+    const locationData = formData.value.location ? {
+      ...formData.value.location,
+      address: formData.value.locationAddress || formData.value.location.address
+    } : null
+    
     const newProfile = familyTree.addProfile({
       name: formData.value.name.trim(),
       age: formData.value.age || null,
       description: formData.value.description || '',
       biography: formData.value.biography || '',
-      location: formData.value.location,
+      location: locationData,
       relation: formData.value.relation || null,
       parentId: parentId,
       images: formData.value.images,

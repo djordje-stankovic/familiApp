@@ -60,9 +60,14 @@ function createStarfield(count = 3000, radius = 1500) {
 }
 
 export class Tree3DRenderer {
-    constructor(canvas, familyTree) {
-        this.canvas = canvas
+    constructor(container, familyTree, options = {}) {
+        this.container = container
         this.familyTree = familyTree
+        this.options = {
+            opacity: 1.0,
+            showMapBackground: true,
+            ...options
+        }
         this.scene = null
         this.camera = null
         this.renderer = null
@@ -91,6 +96,30 @@ export class Tree3DRenderer {
         this.currentFlatMapTileZoom = 0 // Current flat map tile zoom level
         this.isUpdatingFlatMapTiles = false // Prevent concurrent flat map tile updates
         
+        // Map tile configuration
+        // Set your MapTiler API key here or use environment variable
+        // Get free API key at: https://www.maptiler.com/cloud/
+        // Free tier: 100,000 requests/month
+        this.mapTilerApiKey = import.meta.env.VITE_MAPTILER_API_KEY || null
+        // Map style: 'boundaries' (MapTiler custom style - only country boundaries and capitals),
+        // 'basic' (MapTiler basic style - cleaner than OSM), 'osm' (standard OpenStreetMap with all details),
+        // 'static-boundaries' (static image with only boundaries - no zoom detail)
+        this.mapTileStyle = import.meta.env.VITE_MAP_TILE_STYLE || 'osm' // 'boundaries', 'basic', 'osm', 'static-boundaries'
+        
+        // Static boundaries map URL (optional - can be a custom map from MapChart.net or similar)
+        // If set, this will be used as base texture instead of tiles
+        this.staticBoundariesMapUrl = import.meta.env.VITE_STATIC_BOUNDARIES_MAP_URL || null
+        
+        // Map tile configuration (override / final values)
+        // API key (again, to ensure it's picked up even if env changes)
+        this.mapTilerApiKey = import.meta.env.VITE_MAPTILER_API_KEY || null
+        // Optional: custom MapTiler style ID (e.g. 019b6913-ed44-7f06-86c3-e53c95e39853)
+        // When set, this style will be korišćen za sve MapTiler tile-ove.
+        this.mapTilerStyleId = import.meta.env.VITE_MAPTILER_STYLE_ID || null
+        // Map style hint: 'boundaries' (custom style with only country boundaries and capitals),
+        // 'basic' (MapTiler basic style), 'osm' (standard OpenStreetMap)
+        this.mapTileStyle = import.meta.env.VITE_MAP_TILE_STYLE || 'boundaries' // 'boundaries', 'basic', 'osm'
+        
         // Updaters map
         this.updaters = new Map()
         this.clock = new THREE.Clock()
@@ -111,10 +140,17 @@ export class Tree3DRenderer {
     }
     
     init() {
-        if (!this.canvas) {
-            console.error('Canvas element nije dostupan')
+        if (!this.container) {
+            console.error('Container element nije dostupan')
             return
         }
+        
+        // Create canvas element
+        this.canvas = document.createElement('canvas')
+        this.canvas.style.width = '100%'
+        this.canvas.style.height = '100%'
+        this.canvas.style.display = 'block'
+        this.container.appendChild(this.canvas)
         
         // 1. Scene Setup
         this.scene = new THREE.Scene()
@@ -240,6 +276,9 @@ export class Tree3DRenderer {
                 }
             }
             
+            // FLEET VIEW - ZAKOMENTARISANO: Tile update na zoom promene
+            // Samo inicijalno učitavanje tile-ova, bez dinamičkog update-a
+            /*
             // Update Flat Map texture with OpenStreetMap tiles for detailed map
             if (this.mapMode === 'flat' && this.flatMapMaterial && this.flatMapGroup) {
                 // Calculate appropriate tile zoom level based on camera distance
@@ -252,6 +291,7 @@ export class Tree3DRenderer {
                     this.currentFlatMapTileZoom = tileZoom
                 }
             }
+            */
             
             // Dynamically adjust texture filtering for better detail when zoomed in
             if (this.earthMaterial && this.earthMaterial.map) {
@@ -650,6 +690,12 @@ export class Tree3DRenderer {
     
     // Create Earth sphere
     createEarth() {
+        // Check if map background should be shown
+        if (!this.options.showMapBackground) {
+            console.log('Map background disabled - skipping Earth creation')
+            return
+        }
+        
         if (this.earthGroup) {
             this.scene.remove(this.earthGroup)
             this.unregisterUpdater('earth-rotation')
@@ -668,25 +714,68 @@ export class Tree3DRenderer {
         // Use a high-resolution map texture - try to find one with better country borders
         const loader = new THREE.TextureLoader()
         
-        // Start with a simple placeholder texture - will be replaced with OSM tiles
-        // Create a temporary canvas texture as placeholder
-        const canvas = document.createElement('canvas')
-        canvas.width = 2048
-        canvas.height = 1024
-        const ctx = canvas.getContext('2d')
-        ctx.fillStyle = '#6ba3d1'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        // Start with a simple placeholder texture - will be replaced with tiles or static map
+        // If static boundaries map is configured, load it; otherwise use placeholder
+        let earthTexture
         
-        const earthTexture = new THREE.CanvasTexture(canvas)
-        earthTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
-        earthTexture.minFilter = THREE.LinearMipmapLinearFilter
-        earthTexture.magFilter = THREE.LinearFilter
-        earthTexture.wrapS = THREE.RepeatWrapping
-        earthTexture.wrapT = THREE.RepeatWrapping
-        earthTexture.generateMipmaps = true
-        earthTexture.userData.isPlaceholder = true
-        
-        console.log('Earth placeholder texture created - will be replaced with OSM tiles')
+        if (this.mapTileStyle === 'static-boundaries' && this.staticBoundariesMapUrl) {
+            // Load static boundaries map
+            const loader = new THREE.TextureLoader()
+            earthTexture = loader.load(
+                this.staticBoundariesMapUrl,
+                (texture) => {
+                    console.log('Static boundaries map loaded')
+                    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+                    texture.minFilter = THREE.LinearMipmapLinearFilter
+                    texture.magFilter = THREE.LinearFilter
+                    texture.wrapS = THREE.RepeatWrapping
+                    texture.wrapT = THREE.RepeatWrapping
+                    texture.generateMipmaps = true
+                    if (this.earthMaterial) {
+                        this.earthMaterial.map = texture
+                        this.earthMaterial.needsUpdate = true
+                    }
+                },
+                undefined,
+                (err) => {
+                    console.warn('Failed to load static boundaries map, using placeholder:', err)
+                    // Fallback to placeholder
+                    const canvas = document.createElement('canvas')
+                    canvas.width = 2048
+                    canvas.height = 1024
+                    const ctx = canvas.getContext('2d')
+                    ctx.fillStyle = '#6ba3d1'
+                    ctx.fillRect(0, 0, canvas.width, canvas.height)
+                    earthTexture = new THREE.CanvasTexture(canvas)
+                    earthTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+                    earthTexture.minFilter = THREE.LinearMipmapLinearFilter
+                    earthTexture.magFilter = THREE.LinearFilter
+                    earthTexture.wrapS = THREE.RepeatWrapping
+                    earthTexture.wrapT = THREE.RepeatWrapping
+                    earthTexture.generateMipmaps = true
+                    earthTexture.userData.isPlaceholder = true
+                }
+            )
+        } else {
+            // Create a temporary canvas texture as placeholder
+            const canvas = document.createElement('canvas')
+            canvas.width = 2048
+            canvas.height = 1024
+            const ctx = canvas.getContext('2d')
+            ctx.fillStyle = '#6ba3d1'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            
+            earthTexture = new THREE.CanvasTexture(canvas)
+            earthTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy()
+            earthTexture.minFilter = THREE.LinearMipmapLinearFilter
+            earthTexture.magFilter = THREE.LinearFilter
+            earthTexture.wrapS = THREE.RepeatWrapping
+            earthTexture.wrapT = THREE.RepeatWrapping
+            earthTexture.generateMipmaps = true
+            earthTexture.userData.isPlaceholder = true
+            
+            console.log('Earth placeholder texture created - will be replaced with map tiles')
+        }
         
         const material = new THREE.MeshStandardMaterial({
             map: earthTexture,
@@ -724,16 +813,18 @@ export class Tree3DRenderer {
         
         // Earth rotation disabled - static view
         
-        // Immediately start loading OSM tiles for detailed map
+        // Immediately start loading map tiles for detailed map (unless using static boundaries)
         // Use initial zoom level (will update as user zooms)
-        setTimeout(() => {
-            if (this.mapMode === 'globe' && this.earthMaterial) {
-                const initialZoom = 4 // Start with zoom level 4 for reasonable detail and performance
-                console.log('Starting initial OSM tile load with zoom:', initialZoom)
-                this.updateEarthTextureWithOSMTiles(initialZoom)
-                this.currentTileZoom = initialZoom
-            }
-        }, 500) // Small delay to ensure everything is initialized
+        if (this.mapTileStyle !== 'static-boundaries') {
+            setTimeout(() => {
+                if (this.mapMode === 'globe' && this.earthMaterial) {
+                    const initialZoom = 4 // Start with zoom level 4 for reasonable detail and performance
+                    console.log(`Starting initial map tile load with zoom: ${initialZoom}, style: ${this.mapTileStyle}`)
+                    this.updateEarthTextureWithOSMTiles(initialZoom)
+                    this.currentTileZoom = initialZoom
+                }
+            }, 500) // Small delay to ensure everything is initialized
+        }
     }
     
     // Convert lat/lng to tile coordinates (for OpenStreetMap)
@@ -744,9 +835,30 @@ export class Tree3DRenderer {
         return { x, y, z: zoom }
     }
     
-    // Load a single OSM tile image
+    // Get tile URL based on configured style
+    getTileUrl(z, x, y) {
+        // If custom MapTiler style ID is configured, always use it
+        // Example viewer URL from MapTiler:
+        // https://api.maptiler.com/maps/019b6913-ed44-7f06-86c3-e53c95e39853/?key=YOUR_KEY#1.0/0/0
+        // Corresponding tile URL:
+        // https://api.maptiler.com/maps/019b6913-ed44-7f06-86c3-e53c95e39853/256/{z}/{x}/{y}.png?key=YOUR_KEY
+        if (this.mapTilerApiKey && this.mapTilerStyleId) {
+            return `https://api.maptiler.com/maps/${this.mapTilerStyleId}/256/${z}/${x}/${y}.png?key=${this.mapTilerApiKey}`
+        }
+        
+        // If MapTiler is configured and style is 'boundaries' or 'basic', use MapTiler predefined styles
+        if (this.mapTilerApiKey && (this.mapTileStyle === 'boundaries' || this.mapTileStyle === 'basic')) {
+            const style = this.mapTileStyle === 'boundaries' ? 'basic' : 'basic'
+            return `https://api.maptiler.com/maps/${style}/256/${z}/${x}/${y}.png?key=${this.mapTilerApiKey}`
+        }
+        
+        // Default: Use standard OpenStreetMap tiles
+        return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+    }
+    
+    // Load a single map tile image (supports OSM and MapTiler)
     loadOSMTile(z, x, y) {
-        const tileKey = `${z}/${x}/${y}`
+        const tileKey = `${this.mapTileStyle}-${z}/${x}/${y}`
         
         // Check cache first
         if (this.earthTiles.has(tileKey)) {
@@ -773,8 +885,8 @@ export class Tree3DRenderer {
                 this.earthTiles.set(tileKey, placeholder)
                 resolve(placeholder)
             }
-            // Use OpenStreetMap tile server (free and open source)
-            img.src = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+            // Use configured tile source (OSM or MapTiler)
+            img.src = this.getTileUrl(z, x, y)
         })
     }
     
@@ -1661,7 +1773,44 @@ export class Tree3DRenderer {
             this.createFlatMap()
         }
         
+        // FLEET VIEW - SAMO MAPA SVETA, BEZ MARKERA I DODATNIH FUNKCIONALNOSTI
+        // Zakomentarisano: svi markeri, tile update na zoom promene, itd.
+        
         // NO MARKERS - just the detailed map
+        /*
+        // MARKERI ZAKOMENTARISANI - samo mapa sveta
+        if (profilesWithLocation && profilesWithLocation.length > 0) {
+            const shouldShowIndividual = this.shouldShowIndividualProfiles()
+            const shouldShowCities = this.shouldShowCities()
+            
+            if (shouldShowIndividual) {
+                // Show individual profiles
+                profilesWithLocation.forEach(profile => {
+                    const position = this.latLngToFlatMap(profile.location.lat, profile.location.lng)
+                    const color = this.getProfileColor(profile)
+                    this.createIndividualProfileMarkerFlat(profile, position, color, 1.5)
+                })
+            } else if (shouldShowCities) {
+                // Group by city
+                const cityGroups = this.groupProfilesByCity(profilesWithLocation)
+                cityGroups.forEach(group => {
+                    const position = this.latLngToFlatMap(group.lat, group.lng)
+                    const color = this.getProfileColor(group.profiles[0])
+                    const size = Math.min(3, 1 + group.profiles.length * 0.2)
+                    this.createCityMarkerFlat(group, position, color, size)
+                })
+            } else {
+                // Group by country
+                const countryGroups = this.groupProfilesByCountry(profilesWithLocation)
+                countryGroups.forEach(group => {
+                    const position = this.latLngToFlatMap(group.lat, group.lng)
+                    const color = this.getProfileColor(group.profiles[0])
+                    const size = Math.min(4, 1.5 + group.profiles.length * 0.3)
+                    this.createCountryMarkerFlat(group, position, color, size)
+                })
+            }
+        }
+        */
         
         // Set camera to view flat map (only if not preserving camera position)
         if (!preserveCamera) {
@@ -1683,7 +1832,7 @@ export class Tree3DRenderer {
             this.controls.zoomSpeed = 2.0
         }
         
-        console.log('Flat map view rendered')
+        console.log('Flat map view rendered - samo mapa sveta')
     }
     
     // Render map view with profiles on their locations
@@ -1704,7 +1853,16 @@ export class Tree3DRenderer {
         console.log('Profiles with location:', profilesWithLocation.length)
         
         if (profilesWithLocation.length === 0) {
-            console.warn('No profiles with location data')
+            console.warn('No profiles with location data - rendering map without markers')
+            
+            // I dalje želimo da prikažemo mapu (globe ili flat), samo bez markera
+            if (this.mapMode === 'globe') {
+                this.renderGlobeView([])
+            } else {
+                this.renderFlatMapView([])
+            }
+            
+            // Nema potrebe za zoom-watcherom kada nema markera
             return
         }
         
@@ -1714,6 +1872,9 @@ export class Tree3DRenderer {
             this.renderFlatMapView(profilesWithLocation)
         }
         
+        // FLEET VIEW - ZAKOMENTARISANO: Zoom watcher za re-rendering markera
+        // Samo za Globe view, Fleet view ne treba re-rendering
+        /*
         // Watch for zoom changes and re-render when zoom level changes significantly
         // Use a debounced approach to avoid too frequent re-renders
         this.registerUpdater('zoom-watcher', () => {
@@ -1730,7 +1891,8 @@ export class Tree3DRenderer {
                     if (this.mapMode === 'globe') {
                         this.renderGlobeView(profilesWithLocation, true) // Preserve camera position
                     } else {
-                        this.renderFlatMapView(profilesWithLocation, true) // Preserve camera position
+                        // FLEET VIEW - ne re-renderujemo, samo mapa
+                        // this.renderFlatMapView(profilesWithLocation, true) // Preserve camera position
                     }
                     this.zoomWatcherTimeout = null
                 }, 200) // Increased delay to prevent too frequent re-renders
@@ -1746,7 +1908,8 @@ export class Tree3DRenderer {
                     if (this.mapMode === 'globe') {
                         this.renderGlobeView(profilesWithLocation, true) // Preserve camera position
                     } else {
-                        this.renderFlatMapView(profilesWithLocation, true) // Preserve camera position
+                        // FLEET VIEW - ne re-renderujemo, samo mapa
+                        // this.renderFlatMapView(profilesWithLocation, true) // Preserve camera position
                     }
                     this.zoomWatcherTimeout = null
                 }, 300) // Increased delay to prevent too frequent re-renders
@@ -1755,6 +1918,46 @@ export class Tree3DRenderer {
                 this.lastZoomLevel = currentZoom
             }
         })
+        */
+        
+        // FLEET VIEW - samo za Globe view imamo zoom watcher
+        if (this.mapMode === 'globe') {
+            this.registerUpdater('zoom-watcher', () => {
+                const currentZoom = this.getZoomLevel()
+                const shouldShowIndividual = this.shouldShowIndividualProfiles()
+                const lastShowIndividual = this.lastShowIndividual !== undefined ? this.lastShowIndividual : false
+                
+                // Re-render when switching between individual/grouped views (samo za Globe)
+                if (shouldShowIndividual !== lastShowIndividual) {
+                    if (this.zoomWatcherTimeout) {
+                        clearTimeout(this.zoomWatcherTimeout)
+                    }
+                    this.zoomWatcherTimeout = setTimeout(() => {
+                        if (this.mapMode === 'globe') {
+                            this.renderGlobeView(profilesWithLocation, true) // Preserve camera position
+                        }
+                        this.zoomWatcherTimeout = null
+                    }, 200)
+                    this.lastShowIndividual = shouldShowIndividual
+                }
+                
+                // Also re-render on significant zoom changes (samo za Globe)
+                if (this.lastZoomLevel !== undefined && Math.abs(currentZoom - this.lastZoomLevel) > 0.15) {
+                    if (this.zoomWatcherTimeout) {
+                        clearTimeout(this.zoomWatcherTimeout)
+                    }
+                    this.zoomWatcherTimeout = setTimeout(() => {
+                        if (this.mapMode === 'globe') {
+                            this.renderGlobeView(profilesWithLocation, true) // Preserve camera position
+                        }
+                        this.zoomWatcherTimeout = null
+                    }, 300)
+                    this.lastZoomLevel = currentZoom
+                } else if (this.lastZoomLevel === undefined) {
+                    this.lastZoomLevel = currentZoom
+                }
+            })
+        }
     }
     
     createFamilyCluster(familyId, profiles, position, color) {
