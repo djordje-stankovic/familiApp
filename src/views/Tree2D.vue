@@ -1,9 +1,5 @@
 <template>
   <div class="tree-2d-container">
-    <AppHeader />
-
-    <!-- Uklonjen page-header sa naslovom i dugmićima da bi canvas bio full-screen -->
-    
     <div class="tree-content">
       <div
         class="tree-canvas"
@@ -13,7 +9,7 @@
         @mousemove="handlePan"
         @mouseup="stopPan"
         @mouseleave="stopPan"
-        :style="{ cursor: zoomState.isDragging ? 'grabbing' : 'grab' }"
+        :class="{ 'is-panning': zoomState.isDragging, 'interactive': props.isInteractive }"
       >
         <div class="tree-transform-group" :style="transformStyle">
           <svg class="tree-lines" v-if="visibleNodes.length > 0">
@@ -32,28 +28,25 @@
             v-for="node in visibleNodes"
             :key="node.id"
             class="tree-node"
-            :class="{ 'root-node': node.id === familyTree.rootProfileId, 'selected': selectedNode === node.id }"
+            :class="{ 'root-node': node.id === rootId, 'selected': selectedNode === node.id }"
             :style="{ left: node.x + 'px', top: node.y + 'px' }"
-            @click.stop="selectNode(node.id)"
-            @dblclick.stop="editProfile(node.id)"
-            @contextmenu.prevent="showContextMenu(node.id, $event)"
+            @dblclick.stop="handleNodeClick(node.id)"
             @mousedown.stop="startDrag(node.id, $event)"
           >
             <div class="node-card">
               <div class="node-avatar-wrapper">
-                <img v-if="node.profileImage" :src="node.profileImage" alt="Slika" class="node-image" />
-                <div v-else class="node-avatar">
-                  {{ (node.profile?.firstName || node.name)?.charAt(0).toUpperCase() }}
+                <div class="node-avatar">
+                  {{ node.firstName.charAt(0).toUpperCase() }}
                 </div>
               </div>
               <div class="node-info">
                 <div class="node-name">
-                  {{ node.profile?.firstName || node.name }} {{ node.profile?.lastName || '' }}
+                  {{ node.firstName }} {{ node.lastName }}
                 </div>
                 <div class="node-details">
                   <span v-if="node.age">{{ node.age }} god</span>
-                  <span v-if="node.profile?.city || node.profile?.country">
-                    📍 {{ [node.profile?.city, node.profile?.country].filter(Boolean).join(', ') }}
+                  <span v-if="node.city || node.country">
+                    📍 {{ [node.city, node.country].filter(Boolean).join(', ') }}
                   </span>
                 </div>
               </div>
@@ -62,23 +55,18 @@
         </div>
       </div>
 
-      <!-- Side Panel – otvara se samo kad se klikne na čvor -->
-      <transition
-  name="slide"
-  @enter="onPanelEnter"
-  @leave="onPanelLeave"
->
+      <!-- Side Panel -->
+      <transition name="slide">
         <div v-if="selectedNode" class="side-panel open" ref="sidePanelRef">
           <button class="close-btn" @click="deselectNode">✕</button>
           
           <div class="panel-content" v-if="selectedProfile">
             <div class="panel-header">
               <div class="panel-avatar-large">
-                <img v-if="selectedProfile.profileImage" :src="selectedProfile.profileImage" alt="Profil" />
-                <span v-else>{{ selectedProfile.name.charAt(0).toUpperCase() }}</span>
+                <span>{{ selectedProfile.firstName.charAt(0).toUpperCase() }}</span>
               </div>
               <div>
-                <h2>{{ selectedProfile.name }}</h2>
+                <h2>{{ selectedProfile.firstName }} {{ selectedProfile.lastName }}</h2>
                 <p class="subtitle">{{ selectedProfile.age ? selectedProfile.age + ' godina' : 'Godine nepoznate' }}</p>
               </div>
             </div>
@@ -86,368 +74,171 @@
             <div class="panel-info">
               <div class="info-item">
                 <strong>Lokacija:</strong>
-                <span>{{ [selectedProfile.profile?.city, selectedProfile.profile?.country].filter(Boolean).join(', ') || 'Nepoznato' }}</span>
+                <span>{{ [selectedProfile.city, selectedProfile.country].filter(Boolean).join(', ') || 'Nepoznato' }}</span>
               </div>
-              <div class="info-item">
-                <strong>Biografija:</strong>
-                <span>{{ selectedProfile.profile?.bio || 'Nema biografije.' }}</span>
-              </div>
-            </div>
-
-            <div class="panel-actions">
-              <button class="btn btn-add" @click="showQuickAddMenu(selectedNode)">
-                👨‍👩‍👧‍👦 Dodaj rođaka
-              </button>
-              <button class="btn btn-edit" @click="editProfile(selectedNode)">
-                ✏️ Uredi profil
-              </button>
-              <button 
-                class="btn btn-delete" 
-                @click="deleteProfile(selectedNode)"
-                :disabled="selectedNode === familyTree.rootProfileId && familyTree.getAllProfiles().length > 1"
-              >
-                🗑️ Obriši profil
-              </button>
             </div>
           </div>
         </div>
       </transition>
-
-      <!-- Kontekstni meni za dodavanje rođaka -->
-      <div v-if="contextMenu.show" class="context-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
-        <div class="menu-title">Dodaj rođaka</div>
-        <div class="menu-item" @click="addRelation('child')">👶 Dete</div>
-        <div class="menu-item" @click="addRelation('parent')">👴 Roditelj</div>
-        <div class="menu-item" @click="addRelation('sibling')">👦 Brat / 👧 Sestra</div>
-        <div class="menu-item" @click="addRelation('spouse')">💍 Supružnik</div>
-        <div class="menu-divider"></div>
-        <div class="menu-item cancel" @click="closeContextMenu">Otkaži</div>
-      </div>
-
-      <!-- Empty state -->
-      <div v-if="visibleNodes.length === 0" class="empty-state">
-        <div class="empty-content">
-          <h2>Počni svoje porodično stablo</h2>
-          <p>Dodajte prvi profil da započnete</p>
-          <button @click="showStartModal = true" class="btn-large">+ Dodaj profil</button>
-        </div>
-      </div>
     </div>
-
-    <StartBuildingTreeModal :show="showStartModal" @close="showStartModal = false" @saved="handleProfileCreated" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useFamilyTreeStore } from '../stores/familyTree'
-import AppHeader from '../components/AppHeader.vue'
-import StartBuildingTreeModal from '../components/StartBuildingTreeModal.vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import maplibregl from 'maplibre-gl'
 
-const router = useRouter()
-const route = useRoute()
-const { familyTree } = useFamilyTreeStore()
+const props = defineProps({
+  mapInstance: {
+    type: Object,
+    default: null  // opciono – ako nema mape, ništa se ne radi
+  },
+  isInteractive: {
+    type: Boolean,
+    default: false  // kontroliše da li je stablo interaktivno
+  }
+})
 
+const emit = defineEmits(['focusOnLocation'])
+
+// === HARD-CODED PODACI SA LAT/LNG ===
+const rootId = 'marko'
+const profiles = [
+  { id: 'petar', firstName: 'Petar', lastName: 'Marković', age: 70, city: 'Beograd', country: 'Srbija', lat: 44.8176, lng: 20.4633 },
+  { id: 'marko', firstName: 'Marko', lastName: 'Marković', age: 45, city: 'Beograd', country: 'Srbija', lat: 44.8176, lng: 20.4633, parentId: 'petar', spouseId: 'ana' },
+  { id: 'ana',   firstName: 'Ana',   lastName: 'Marković', age: 42, city: 'Beograd', country: 'Srbija', lat: 44.8176, lng: 20.4633, spouseId: 'marko' },
+  { id: 'luka',  firstName: 'Luka',  lastName: 'Marković', age: 16, city: 'Beograd', country: 'Srbija', lat: 44.8176, lng: 20.4633, parentId: 'marko' },
+  { id: 'sara',  firstName: 'Sara',  lastName: 'Marković', age: 12, city: 'Beograd', country: 'Srbija', lat: 44.8176, lng: 20.4633, parentId: 'marko' },
+  { id: 'milan', firstName: 'Milan', lastName: 'Petrović', age: 48, city: 'Novi Sad', country: 'Srbija', lat: 45.2671, lng: 19.8335 },
+]
+
+// === STANJE I LAYOUT (isto kao pre) ===
+const selectedNode = ref(null)
+const nodePositions = ref(new Map())
+const dragState = ref({ isDragging: false, startX: 0, startY: 0, nodeX: 0, nodeY: 0 })
+const draggingNode = ref(null)
+
+const zoomState = ref({ scale: 1, offsetX: 0, offsetY: 0, isDragging: false, lastX: 0, lastY: 0 })
 const treeCanvasRef = ref(null)
 const sidePanelRef = ref(null)
-const selectedNode = ref(null)
-const draggingNode = ref(null)
-const dragState = ref({ isDragging: false, startX: 0, startY: 0, nodeX: 0, nodeY: 0 })
-const contextMenu = ref({ show: false, x: 0, y: 0, profileId: null })
-const nodePositions = ref(new Map())
-const refreshKey = ref(0)
-const showStartModal = ref(false)
 
-// Zoom i pan
-const onPanelEnter = (el) => {
-  el.style.visibility = 'visible'
-  el.style.pointerEvents = 'auto'
-}
-
-const onPanelLeave = (el, done) => {
-  el.style.visibility = 'hidden'
-  el.style.pointerEvents = 'none'
-  done()
-}
-const zoomState = ref({
-  scale: 1,
-  offsetX: 0,
-  offsetY: 0,
-  isDragging: false,
-  lastX: 0,
-  lastY: 0
-})
-
-const transformStyle = computed(() => ({
-  transform: `translate(${zoomState.value.offsetX}px, ${zoomState.value.offsetY}px) scale(${zoomState.value.scale})`
-}))
-
-const selectedProfile = computed(() => {
-  if (!selectedNode.value) return null
-  return familyTree.getProfile(selectedNode.value)
-})
-
-// === LAYOUT LOGIKA ===
-const calculateTreeLayout = () => {
-  const profiles = familyTree.getAllProfiles()
-  if (profiles.length === 0) return new Map()
-
-  const rootId = familyTree.rootProfileId || profiles[0]?.id
-  const root = profiles.find(p => p.id === rootId)
-  if (!root) return new Map()
-
+const calculateLayout = () => {
   const layout = new Map()
-  const nodeWidth = 300    // malo veće zbog horizontalne kartice
-  const nodeHeight = 100
-  const horizontalSpacing = 320
-  const verticalSpacing = 220
-  const centerX = 800
-  const centerY = 600
+  const nodeWidth = 180    // manje kartice
+  const hSpacing = 220
+  const vSpacing = 150
 
-  const hasSavedPosition = (id) => {
-    const pos = familyTree.getProfilePosition(id)
-    return pos && typeof pos.x === 'number' && typeof pos.y === 'number'
-  }
-
-  // Root pozicija
-  let rootX = centerX - nodeWidth / 2
-  let rootY = centerY - nodeHeight / 2
-  if (hasSavedPosition(rootId)) {
-    const saved = familyTree.getProfilePosition(rootId)
-    rootX = saved.x
-    rootY = saved.y
-  }
-  layout.set(rootId, { id: rootId, profile: root, x: rootX, y: rootY })
-
-  // Rekurzivno pozicioniranje dece
-  const positionChildren = (parentId, parentCenterX, parentCenterY) => {
-    const children = profiles.filter(p => p.parentId === parentId)
-    children.forEach((child, i) => {
-      const saved = hasSavedPosition(child.id) ? familyTree.getProfilePosition(child.id) : null
-      let childX, childY
-      if (saved) {
-        childX = saved.x
-        childY = saved.y
-      } else {
-        childX = parentCenterX + (i - (children.length - 1) / 2) * horizontalSpacing - nodeWidth / 2
-        childY = parentCenterY + verticalSpacing
-      }
-      layout.set(child.id, { id: child.id, profile: child, x: childX, y: childY })
-      positionChildren(child.id, childX + nodeWidth / 2, childY + nodeHeight / 2)
-    })
-  }
-
-  positionChildren(rootId, rootX + nodeWidth / 2, rootY + nodeHeight)
-
-  // Supružnici – pored partnera
-  profiles.forEach(p => {
-    if (p.spouseId && !layout.has(p.id)) {
-      const spouse = profiles.find(s => s.id === p.spouseId)
-      if (spouse && layout.has(spouse.id)) {
-        const sp = layout.get(spouse.id)
-        const saved = hasSavedPosition(p.id) ? familyTree.getProfilePosition(p.id) : null
-        if (saved) {
-          layout.set(p.id, { id: p.id, profile: p, x: saved.x, y: saved.y })
-        } else {
-          layout.set(p.id, { id: p.id, profile: p, x: sp.x + horizontalSpacing, y: sp.y })
-        }
-      }
-    }
-  })
+  layout.set('marko', { x: 800, y: 400 })
+  layout.set('petar', { x: 800, y: 400 - vSpacing })
+  layout.set('ana',   { x: 800 + hSpacing, y: 400 })
+  layout.set('luka',  { x: 800 - hSpacing / 2, y: 400 + vSpacing })
+  layout.set('sara',  { x: 800 + hSpacing / 2, y: 400 + vSpacing })
+  layout.set('milan', { x: 1000, y: 100 })
 
   return layout
 }
 
+const baseLayout = calculateLayout()
+
 const visibleNodes = computed(() => {
-  refreshKey.value // force re-calc
-
-  const layout = calculateTreeLayout()
-  if (layout.size === 0) return []
-
-  const nodes = []
-  for (const data of layout.values()) {
-    const dragPos = nodePositions.value.get(data.id)
-    nodes.push({
-      id: data.id,
-      name: data.profile.name || 'Nepoznato',
-      profileImage: data.profile.profileImage,
-      profile: data.profile,
-      age: data.profile.age,
-      x: dragPos ? dragPos.x : data.x,
-      y: dragPos ? dragPos.y : data.y
-    })
-  }
-
-  // Ažuriraj veličinu canvasa
-  if (treeCanvasRef.value && nodes.length > 0) {
-    const padding = 400
-    const maxX = Math.max(...nodes.map(n => n.x + 300)) + padding
-    const maxY = Math.max(...nodes.map(n => n.y + 100)) + padding
-    const minX = Math.min(...nodes.map(n => n.x)) - padding
-    const minY = Math.min(...nodes.map(n => n.y)) - padding
-
-    treeCanvasRef.value.style.width = `${Math.max(1600, maxX - minX)}px`
-    treeCanvasRef.value.style.height = `${Math.max(1200, maxY - minY)}px`
-  }
-
-  return nodes
+  return profiles.map(p => {
+    const base = baseLayout.get(p.id) || { x: 0, y: 0 }
+    const dragPos = nodePositions.value.get(p.id)
+    return { ...p, x: dragPos ? dragPos.x : base.x, y: dragPos ? dragPos.y : base.y }
+  })
 })
+
+const selectedProfile = computed(() => profiles.find(p => p.id === selectedNode.value) || null)
 
 const connectionLines = computed(() => {
   const lines = []
-  const processedSpouses = new Set()
-
-  visibleNodes.value.forEach(node => {
-    const profile = node.profile
-
-    // Roditelj → dete
-    if (profile.parentId) {
-      const parentNode = visibleNodes.value.find(n => n.id === profile.parentId)
-      if (parentNode) {
-        lines.push({
-          x1: parentNode.x + 150,
-          y1: parentNode.y + 50,
-          x2: node.x + 150,
-          y2: node.y
+  const cardCenterX = 90 // Pola širine kartice (180px / 2)
+  const cardHeight = 60 // Približna visina kartice
+  const cardCenterY = cardHeight / 2
+  
+  profiles.forEach(node => {
+    if (node.parentId) {
+      const parent = visibleNodes.value.find(n => n.id === node.parentId)
+      const child = visibleNodes.value.find(n => n.id === node.id)
+      if (parent && child) {
+        lines.push({ 
+          x1: parent.x + cardCenterX, 
+          y1: parent.y + cardHeight, 
+          x2: child.x + cardCenterX, 
+          y2: child.y 
         })
       }
     }
-
-    // Supružnici
-    if (profile.spouseId && !processedSpouses.has(profile.id)) {
-      const partnerNode = visibleNodes.value.find(n => n.id === profile.spouseId)
-      if (partnerNode) {
-        const key = [profile.id, profile.spouseId].sort().join('-')
-        if (!processedSpouses.has(key)) {
-          lines.push({
-            x1: node.x + 150,
-            y1: node.y + 50,
-            x2: partnerNode.x + 150,
-            y2: partnerNode.y + 50
-          })
-          processedSpouses.add(key)
-        }
+    if (node.spouseId && node.id < node.spouseId) {
+      const a = visibleNodes.value.find(n => n.id === node.id)
+      const b = visibleNodes.value.find(n => n.id === node.spouseId)
+      if (a && b) {
+        lines.push({ 
+          x1: a.x + cardCenterX, 
+          y1: a.y + cardCenterY, 
+          x2: b.x + cardCenterX, 
+          y2: b.y + cardCenterY 
+        })
       }
     }
   })
-
   return lines
 })
 
-// === FUNKCIJE (ostaju iste kao pre) ===
-const selectNode = (nodeId) => {
-  selectedNode.value = nodeId
-  closeContextMenu()
-}
+const transformStyle = computed(() => ({
+  transform: `translate(${zoomState.value.offsetX}px, ${zoomState.value.offsetY}px) scale(${zoomState.value.scale})`,
+  transformOrigin: '0 0'
+}))
 
-const deselectNode = () => {
-  selectedNode.value = null
-}
+// === KLJUČNA FUNKCIJA – radi i sa i bez mape ===
+const handleNodeClick = (id) => {
+  selectNode(id)
 
-const editProfile = (id) => {
-  router.push(`/home?profileId=${id}`)
-}
-
-const showContextMenu = (profileId, event) => {
-  contextMenu.value = {
-    show: true,
-    x: event.clientX,
-    y: event.clientY,
-    profileId
+  const profile = profiles.find(p => p.id === id)
+  if (profile) {
+    // Emituj event sa podacima profila da Tree3D otvori modal
+    emit('focusOnLocation', profile)
   }
 }
 
-const showQuickAddMenu = (profileId) => {
-  const node = visibleNodes.value.find(n => n.id === profileId)
-  if (node) {
-    contextMenu.value = {
-      show: true,
-      x: node.x + 320,
-      y: node.y + 60,
-      profileId
-    }
-  }
-}
+const selectNode = (id) => { selectedNode.value = id }
+const deselectNode = () => { selectedNode.value = null }
 
-const closeContextMenu = () => {
-  contextMenu.value.show = false
-}
-
-const addRelation = (relationType) => {
-  const profileId = contextMenu.value.profileId
-  closeContextMenu()
-  router.push({ path: '/home', query: { relation: relationType, relatedTo: profileId } })
-}
-
-const deleteProfile = (profileId) => {
-  const profile = familyTree.getProfile(profileId)
-  if (confirm(`Obrisati "${profile.name}"?`)) {
-    familyTree.deleteProfile(profileId)
-    deselectNode()
-    refreshKey.value++
-  }
-}
-
-// Drag funkcija (samo ako nije root)
-const startDrag = (nodeId, event) => {
-  if (nodeId === familyTree.rootProfileId) return
-  const node = visibleNodes.value.find(n => n.id === nodeId)
-  if (!node) return
-
-  draggingNode.value = nodeId
-  dragState.value = {
-    isDragging: true,
-    startX: event.clientX,
-    startY: event.clientY,
-    nodeX: node.x,
-    nodeY: node.y
-  }
-
-  document.addEventListener('mousemove', handleDrag)
-  document.addEventListener('mouseup', stopDrag)
-}
-
-const handleDrag = (event) => {
-  if (!dragState.value.isDragging) return
-  const deltaX = event.clientX - dragState.value.startX
-  const newX = dragState.value.nodeX + deltaX
-  const newY = dragState.value.nodeY
-
-  nodePositions.value.set(draggingNode.value, { x: newX, y: newY })
-}
-
-const stopDrag = () => {
-  if (draggingNode.value && nodePositions.value.has(draggingNode.value)) {
-    const pos = nodePositions.value.get(draggingNode.value)
-    familyTree.updateProfilePosition(draggingNode.value, pos.x, pos.y)
-    nodePositions.value.delete(draggingNode.value)
-    refreshKey.value++
-  }
-  draggingNode.value = null
-  dragState.value.isDragging = false
-  document.removeEventListener('mousemove', handleDrag)
-  document.removeEventListener('mouseup', stopDrag)
-}
-
-// Zoom točkićem
+// === ZOOM I PAN FUNKCIJE ===
 const handleWheel = (event) => {
+  if (!treeCanvasRef.value) {
+    console.log('handleWheel: treeCanvasRef nije dostupan')
+    return
+  }
+  if (!props.isInteractive) {
+    console.log('handleWheel: isInteractive je false', props.isInteractive)
+    return
+  }
+  console.log('handleWheel: aktivno, isInteractive:', props.isInteractive)
+  
+  event.preventDefault()
+  const delta = event.deltaY > 0 ? 0.9 : 1.1
   const rect = treeCanvasRef.value.getBoundingClientRect()
   const mouseX = event.clientX - rect.left
   const mouseY = event.clientY - rect.top
-
-  const delta = event.deltaY < 0 ? 1.15 : 0.85
-  const newScale = Math.max(0.3, Math.min(zoomState.value.scale * delta, 4))
-
-  const ratio = newScale / zoomState.value.scale
-  zoomState.value.offsetX = mouseX - (mouseX - zoomState.value.offsetX) * ratio
-  zoomState.value.offsetY = mouseY - (mouseY - zoomState.value.offsetY) * ratio
+  
+  // Zoom na poziciju miša
+  const newScale = Math.max(0.1, Math.min(3, zoomState.value.scale * delta))
+  const scaleChange = newScale / zoomState.value.scale
+  
+  // Prilagoditi offset da zoom bude na poziciji miša
+  zoomState.value.offsetX = mouseX - (mouseX - zoomState.value.offsetX) * scaleChange
+  zoomState.value.offsetY = mouseY - (mouseY - zoomState.value.offsetY) * scaleChange
   zoomState.value.scale = newScale
 }
 
-// Pan
 const startPan = (event) => {
-  if (event.target.closest('.tree-node')) return
+  if (!props.isInteractive) {
+    console.log('startPan: isInteractive je false')
+    return
+  }
+  console.log('startPan: aktivno')
+  if (event.target.closest('.tree-node')) return // Ne panuj ako kliknemo na čvor
   zoomState.value.isDragging = true
   zoomState.value.lastX = event.clientX
   zoomState.value.lastY = event.clientY
@@ -455,10 +246,13 @@ const startPan = (event) => {
 
 const handlePan = (event) => {
   if (!zoomState.value.isDragging) return
-  const dx = event.clientX - zoomState.value.lastX
-  const dy = event.clientY - zoomState.value.lastY
-  zoomState.value.offsetX += dx
-  zoomState.value.offsetY += dy
+  
+  const deltaX = event.clientX - zoomState.value.lastX
+  const deltaY = event.clientY - zoomState.value.lastY
+  
+  zoomState.value.offsetX += deltaX
+  zoomState.value.offsetY += deltaY
+  
   zoomState.value.lastX = event.clientX
   zoomState.value.lastY = event.clientY
 }
@@ -467,88 +261,72 @@ const stopPan = () => {
   zoomState.value.isDragging = false
 }
 
-// Klik van panela ili čvora zatvara panel
+// === DRAG ČVOROVA ===
+const startDrag = (nodeId, event) => {
+  if (!props.isInteractive) return
+  event.stopPropagation()
+  draggingNode.value = nodeId
+  dragState.value.isDragging = true
+  dragState.value.startX = event.clientX
+  dragState.value.startY = event.clientY
+  
+  const node = visibleNodes.value.find(n => n.id === nodeId)
+  if (node) {
+    dragState.value.nodeX = node.x
+    dragState.value.nodeY = node.y
+  }
+  
+  document.addEventListener('mousemove', handleDrag)
+  document.addEventListener('mouseup', stopDrag)
+}
+
+const handleDrag = (event) => {
+  if (!dragState.value.isDragging || !draggingNode.value) return
+  
+  const deltaX = (event.clientX - dragState.value.startX) / zoomState.value.scale
+  const deltaY = (event.clientY - dragState.value.startY) / zoomState.value.scale
+  
+  const newX = dragState.value.nodeX + deltaX
+  const newY = dragState.value.nodeY + deltaY
+  
+  nodePositions.value.set(draggingNode.value, { x: newX, y: newY })
+}
+
+const stopDrag = () => {
+  dragState.value.isDragging = false
+  draggingNode.value = null
+  document.removeEventListener('mousemove', handleDrag)
+  document.removeEventListener('mouseup', stopDrag)
+}
+
 const handleOutsideClick = (event) => {
   if (sidePanelRef.value && !sidePanelRef.value.contains(event.target) && !event.target.closest('.tree-node')) {
     deselectNode()
   }
-  if (!event.target.closest('.context-menu')) {
-    closeContextMenu()
-  }
 }
+
+// Watch za isInteractive prop
+watch(() => props.isInteractive, (newVal) => {
+  console.log('Tree2D: isInteractive promenjeno na:', newVal)
+  if (treeCanvasRef.value) {
+    if (newVal) {
+      treeCanvasRef.value.style.pointerEvents = 'auto'
+    } else {
+      treeCanvasRef.value.style.pointerEvents = 'none'
+    }
+  }
+}, { immediate: true })
 
 onMounted(() => {
   document.addEventListener('click', handleOutsideClick)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleOutsideClick)
-})
-
-// Refresh na promenu profila
-watch(() => familyTree.getAllProfiles().length, () => {
-  refreshKey.value++
-})
-onMounted(() => {
-  // SAMO ZA TEST – simulacija više članova porodice
-  if (familyTree.getAllProfiles().length === 1) {
-    const root = familyTree.getAllProfiles()[0]
-    
-    // Dodaj supružnika
-    familyTree.addProfile({
-      name: 'Ana Marković',
-      firstName: 'Ana',
-      lastName: 'Marković',
-      gender: 'female',
-      age: 42,
-      spouseId: root.id
+  if (treeCanvasRef.value) {
+    treeCanvasRef.value.scrollTo({
+      left: 800 - window.innerWidth / 2,
+      top: 400 - window.innerHeight / 2,
+      behavior: 'smooth'
     })
-
-    // Dodaj dvoje dece
-    familyTree.addProfile({
-      name: 'Luka Marković',
-      firstName: 'Luka',
-      lastName: 'Marković',
-      gender: 'male',
-      age: 16,
-      parentId: root.id
-    })
-
-    familyTree.addProfile({
-      name: 'Sara Marković',
-      firstName: 'Sara',
-      lastName: 'Marković',
-      gender: 'female',
-      age: 12,
-      parentId: root.id
-    })
-
-    // Dodaj roditelja (oca od Marka)
-    const otac = familyTree.addProfile({
-      name: 'Petar Marković',
-      firstName: 'Petar',
-      lastName: 'Marković',
-      gender: 'male',
-      age: 70
-    })
-    familyTree.updateProfile(root.id, { ...root, parentId: otac.id })
-
-    refreshKey.value++
   }
-
-  // Centriraj na root
-  setTimeout(() => {
-    if (visibleNodes.value.length > 0) {
-      const rootNode = visibleNodes.value.find(n => n.id === familyTree.rootProfileId)
-      if (rootNode && treeCanvasRef.value) {
-        treeCanvasRef.value.scrollTo({
-          left: rootNode.x - window.innerWidth / 2 + 150,
-          top: rootNode.y - window.innerHeight / 2 + 50,
-          behavior: 'smooth'
-        })
-      }
-    }
-  }, 200)
+  console.log('Tree2D mounted, isInteractive:', props.isInteractive)
 })
 </script>
 
@@ -557,11 +335,34 @@ onMounted(() => {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: #f5f7fa;
+  background: transparent; /* Transparentna za overlay */
   display: flex;
   flex-direction: column;
 }
+.node-card {
+  width: 180px !important;
+  padding: 10px 12px !important;
+}
 
+.node-avatar {
+  width: 40px !important;
+  height: 40px !important;
+  font-size: 1.2rem !important;
+}
+
+.node-name { font-size: 0.95rem !important; }
+.node-details { font-size: 0.75rem !important; }
+
+.tree-transform-group { 
+  position: relative; 
+  width: 100%; 
+  height: 100%; 
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.tree-node { position: absolute; }
+.tree-lines { position: absolute; inset: 0; pointer-events: none; }
+.connection-line { stroke: #c4b5fd; stroke-width: 4; stroke-opacity: 0.9; }
 .tree-content {
   flex: 1;
   position: relative;
@@ -572,7 +373,22 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+  background: transparent; /* Transparentna za overlay */
+  cursor: default;
+  pointer-events: none !important; /* Po defaultu ne blokira */
+}
+
+.tree-canvas.interactive {
+  pointer-events: auto !important; /* Kada je interaktivno, blokira */
+  cursor: grab;
+}
+
+.tree-canvas.interactive.is-panning {
+  cursor: grabbing;
+}
+
+.tree-canvas.interactive .tree-node {
+  cursor: pointer;
 }
 
 /* Kartica čvora */
@@ -580,35 +396,36 @@ onMounted(() => {
   display: flex;
   align-items: center;
   background: white;
-  border-radius: 20px;
-  padding: 16px 20px;
-  width: 320px;
-  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+  border-radius: 12px;
+  padding: 10px 12px;
+  width: 180px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
   cursor: pointer;
   transition: all 0.3s ease;
 }
 
 .node-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 16px 35px rgba(0,0,0,0.15);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
 }
 
 .node-avatar-wrapper {
-  margin-right: 16px;
+  margin-right: 10px;
 }
 
 .node-avatar, .node-image {
-  width: 70px;
-  height: 70px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: linear-gradient(135deg, #667eea, #764ba2);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-size: 2rem;
+  font-size: 1.2rem;
   font-weight: bold;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .node-image {
@@ -621,16 +438,25 @@ onMounted(() => {
   object-fit: cover;
 }
 
+.node-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .node-name {
-  font-size: 1.3rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .node-details {
-  font-size: 0.95rem;
+  font-size: 0.75rem;
   color: #64748b;
+  line-height: 1.3;
 }
 
 /* Side panel */
@@ -824,5 +650,69 @@ onMounted(() => {
   border: none;
   border-radius: 12px;
   cursor: pointer;
+}
+.tree-2d-container { height: 100vh; width: 100vw; overflow: hidden; background: #f5f7fa; display: flex; flex-direction: column; }
+.tree-content { flex: 1; position: relative; overflow: hidden; }
+.tree-canvas { width: 100%; height: 100%; overflow: hidden; background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%); }
+.tree-transform-group {
+  position: relative;     /* obavezno – da bi absolute deca imala kontekst */
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
+}
+
+.tree-node {
+  position: absolute;     /* OVO JE KLJUČNI FIX */
+}
+.connection-line { stroke: #94a3b8; stroke-width: 3; }
+
+.node-card {
+  display: flex; align-items: center; background: white; border-radius: 20px;
+  padding: 16px 20px; width: 320px; box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+  cursor: pointer; transition: all 0.3s ease;
+}
+.node-card:hover { transform: translateY(-6px); box-shadow: 0 16px 35px rgba(0,0,0,0.15); }
+
+.node-avatar-wrapper { margin-right: 16px; }
+.node-avatar {
+  width: 70px; height: 70px; border-radius: 50%;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 2rem; font-weight: bold;
+}
+
+.node-name { font-size: 1.3rem; font-weight: 600; color: #1e293b; margin-bottom: 4px; }
+.node-details { font-size: 0.95rem; color: #64748b; }
+
+.side-panel {
+  position: absolute; top: 0; right: -380px; width: 380px; height: 100%;
+  background: white; box-shadow: -8px 0 30px rgba(0,0,0,0.12); z-index: 1000;
+  padding: 2rem; overflow-y: auto; transition: right 0.4s cubic-bezier(0.25,0.8,0.25,1);
+}
+.side-panel.open { right: 0; }
+
+.close-btn { position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.8rem; color: #94a3b8; cursor: pointer; }
+
+.panel-header { display: flex; align-items: center; margin-bottom: 2rem; }
+.panel-avatar-large {
+  width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2);
+  display: flex; align-items: center; justify-content: center; font-size: 3rem; color: white; margin-right: 1.5rem;
+}
+.panel-header h2 { font-size: 1.8rem; font-weight: 700; color: #1e293b; }
+.subtitle { color: #64748b; margin-top: 0.5rem; }
+
+.info-item { margin-bottom: 1.2rem; line-height: 1.6; }
+.info-item strong { color: #334155; }
+
+.slide-enter-active, .slide-leave-active { transition: transform 0.4s cubic-bezier(0.25,0.8,0.25,1); }
+.slide-enter-from, .slide-leave-to { transform: translateX(100%); }
+
+.tree-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;   /* da ne blokira klikove na čvorove */
 }
 </style>
