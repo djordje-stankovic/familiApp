@@ -7,8 +7,9 @@
         <span>NAZAD</span>
       </button>
       <div class="map-page-title">
-        <h1>Porodično stablo sveta</h1>
-        <p>Članovi porodice širom planete</p>
+        <div class="logo-wrapper">
+          <img :src="logoImage" alt="Koreni Logo" class="logo-image" />
+        </div>
       </div>
     </div>
 
@@ -114,6 +115,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import maplibregl from 'maplibre-gl'
 import Tree2D from './Tree2D.vue'  // <-- putanja do tvoje 2D komponente
+import logoImage from '../image.png'
 
 const router = useRouter()
 const mapContainer = ref(null)
@@ -123,6 +125,7 @@ const currentImageIndex = ref(0)
 const isMouseOverTree = ref(false)
 const treeOverlayRef = ref(null)
 const cardBoxes = ref([])
+const mapMarkers = ref([])
 
 // Funkcija za ažuriranje pozicija box-ova
 const updateCardBoxes = () => {
@@ -301,11 +304,11 @@ const handleProfileClick = (profileData) => {
   }
   currentImageIndex.value = 0
 
-  // Zumiraj mapu na lokaciju profila
+  // Zumiraj mapu na lokaciju profila (smanjen zum)
   if (mapInstance.value && profileData.lat && profileData.lng) {
     mapInstance.value.flyTo({
       center: [profileData.lng, profileData.lat],
-      zoom: 12,
+      zoom: 8,
       duration: 2000,
       essential: true
     })
@@ -324,12 +327,12 @@ const handleBackToProfile = () => {
 // GeoJSON sa dummy tačkama (kao što si imao)
 const createMapPointsGeoJSON = () => {
   const dummyProfiles = [
-    { id: 'd1', name: 'Marko Marković', location: { lat: 44.8176, lng: 20.4633, city: 'Beograd', country: 'Srbija' } },
-    { id: 'd2', name: 'Ana Petrović', location: { lat: 43.8563, lng: 18.4131, city: 'Sarajevo', country: 'BiH' } },
-    { id: 'd3', name: 'Ivan Ivanović', location: { lat: 45.8150, lng: 15.9819, city: 'Zagreb', country: 'Hrvatska' } },
-    { id: 'd4', name: 'Marija Jovanović', location: { lat: 46.0569, lng: 14.5058, city: 'Ljubljana', country: 'Slovenija' } },
-    { id: 'd5', name: 'John Smith', location: { lat: 40.7128, lng: -74.0060, city: 'New York', country: 'SAD' } },
-    { id: 'd6', name: 'Maria Garcia', location: { lat: 41.9028, lng: 12.4964, city: 'Rim', country: 'Italija' } },
+    { id: 'd1', firstName: 'Marko', lastName: 'Marković', name: 'Marko Marković', location: { lat: 44.8176, lng: 20.4633, city: 'Beograd', country: 'Srbija' } },
+    { id: 'd2', firstName: 'Ana', lastName: 'Petrović', name: 'Ana Petrović', location: { lat: 43.8563, lng: 18.4131, city: 'Sarajevo', country: 'BiH' } },
+    { id: 'd3', firstName: 'Ivan', lastName: 'Ivanović', name: 'Ivan Ivanović', location: { lat: 45.8150, lng: 15.9819, city: 'Zagreb', country: 'Hrvatska' } },
+    { id: 'd4', firstName: 'Marija', lastName: 'Jovanović', name: 'Marija Jovanović', location: { lat: 46.0569, lng: 14.5058, city: 'Ljubljana', country: 'Slovenija' } },
+    { id: 'd5', firstName: 'John', lastName: 'Smith', name: 'John Smith', location: { lat: 40.7128, lng: -74.0060, city: 'New York', country: 'SAD' } },
+    { id: 'd6', firstName: 'Maria', lastName: 'Garcia', name: 'Maria Garcia', location: { lat: 41.9028, lng: 12.4964, city: 'Rim', country: 'Italija' } },
   ]
 
   const features = dummyProfiles.map(profile => ({
@@ -337,6 +340,8 @@ const createMapPointsGeoJSON = () => {
     properties: {
       id: profile.id,
       name: profile.name,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
       city: profile.location.city,
       country: profile.location.country
     },
@@ -347,6 +352,55 @@ const createMapPointsGeoJSON = () => {
   }))
 
   return { type: 'FeatureCollection', features }
+}
+
+// Funkcija za kreiranje custom HTML markera
+const createProfileMarker = (profile) => {
+  const el = document.createElement('div')
+  el.className = 'custom-profile-marker'
+  
+  const initials = `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase()
+  const avatarUrl = profile.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=a78bfa&color=fff&size=64&bold=true`
+  
+  // Kreiraj strukturu markera
+  const avatarContainer = document.createElement('div')
+  avatarContainer.className = 'marker-avatar'
+  
+  const img = document.createElement('img')
+  img.src = avatarUrl
+  img.alt = profile.name
+  img.onerror = () => {
+    img.style.display = 'none'
+    fallback.style.display = 'flex'
+  }
+  
+  const fallback = document.createElement('div')
+  fallback.className = 'marker-avatar-fallback'
+  fallback.style.display = 'none'
+  fallback.textContent = initials
+  
+  avatarContainer.appendChild(img)
+  avatarContainer.appendChild(fallback)
+  
+  const nameDiv = document.createElement('div')
+  nameDiv.className = 'marker-name'
+  nameDiv.textContent = `${profile.firstName} ${profile.lastName}`
+  
+  el.appendChild(avatarContainer)
+  el.appendChild(nameDiv)
+  
+  el.addEventListener('click', () => {
+    handleProfileClick({
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      city: profile.city,
+      country: profile.country,
+      lat: profile.location.lat,
+      lng: profile.location.lng
+    })
+  })
+  
+  return el
 }
 
 onMounted(async () => {
@@ -407,41 +461,41 @@ onMounted(async () => {
         paint: { 'text-color': '#ffffff' }
       })
 
-      // Pojedinačne tačke
-      mapInstance.value.addLayer({
-        id: 'unclustered-point',
-        type: 'circle',
-        source: 'family-locations',
-        filter: ['!', ['has', 'point_count']],
-        paint: {
-          'circle-color': '#a78bfa',
-          'circle-radius': 10,
-          'circle-stroke-width': 3,
-          'circle-stroke-color': '#ffffff'
+      // Custom HTML markeri umesto circle layer-a
+      geojsonData.features.forEach((feature) => {
+        if (!feature.properties.point_count) {
+          const profile = {
+            id: feature.properties.id,
+            firstName: feature.properties.firstName,
+            lastName: feature.properties.lastName,
+            name: feature.properties.name,
+            city: feature.properties.city,
+            country: feature.properties.country,
+            location: {
+              lat: feature.geometry.coordinates[1],
+              lng: feature.geometry.coordinates[0]
+            }
+          }
+          
+          const markerEl = createProfileMarker(profile)
+          const marker = new maplibregl.Marker({ element: markerEl })
+            .setLngLat([feature.geometry.coordinates[0], feature.geometry.coordinates[1]])
+            .addTo(mapInstance.value)
+          
+          mapMarkers.value.push(marker)
         }
-      })
-
-      // Popup na klik - ONEMOGUĆEN (ne želimo default popup)
-      // mapInstance.value.on('click', 'unclustered-point', (e) => {
-      //   const coords = e.features[0].geometry.coordinates.slice()
-      //   const props = e.features[0].properties
-      //   new maplibregl.Popup()
-      //     .setLngLat(coords)
-      //     .setHTML(`<strong>${props.name}</strong><br>${props.city}, ${props.country}`)
-      //     .addTo(mapInstance.value)
-      // })
-
-      mapInstance.value.on('mouseenter', 'unclustered-point', () => {
-        mapInstance.value.getCanvas().style.cursor = 'pointer'
-      })
-      mapInstance.value.on('mouseleave', 'unclustered-point', () => {
-        mapInstance.value.getCanvas().style.cursor = ''
       })
     }, 800)
   })
 })
 
 onUnmounted(() => {
+  // Ukloni sve markere
+  mapMarkers.value.forEach(marker => {
+    if (marker) marker.remove()
+  })
+  mapMarkers.value = []
+  
   if (mapInstance.value) {
     mapInstance.value.remove()
   }
@@ -496,22 +550,29 @@ onUnmounted(() => {
 .map-page-title {
   pointer-events: auto;
   text-align: center;
-  color: white;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
 }
 
-.map-page-title h1 {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  margin: 0;
+.logo-wrapper {
+  background: rgba(2, 3, 8, 0.8);
+  padding: 8px 16px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.map-page-title p {
-  font-size: 14px;
-  opacity: 0.8;
-  margin: 4px 0 0;
-  letter-spacing: 1px;
+.logo-image {
+  max-height: 80px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  /* PNG sa transparentnom pozadinom - nema potrebe za mix-blend-mode */
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.8));
+  display: block;
 }
 
 
@@ -583,6 +644,67 @@ onUnmounted(() => {
   pointer-events: none;
   z-index: 100;
   box-sizing: border-box;
+}
+
+/* Custom profile markeri na mapi */
+:deep(.custom-profile-marker) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  z-index: 1;
+}
+
+:deep(.custom-profile-marker:hover) {
+  transform: scale(1.1);
+  z-index: 2;
+}
+
+:deep(.marker-avatar) {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid #a78bfa;
+  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.5);
+  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 6px;
+  position: relative;
+}
+
+:deep(.marker-avatar img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+:deep(.marker-avatar-fallback) {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+:deep(.marker-name) {
+  background: rgba(15, 15, 35, 0.95);
+  color: #e0d4ff;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  backdrop-filter: blur(8px);
+  margin-top: 2px;
 }
 
 /* Linije – svetle i kontrastne */
